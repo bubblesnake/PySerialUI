@@ -10,6 +10,97 @@ import serial
 import serial.tools.list_ports
 import threading
 import time
+import re
+
+
+class AnsiColorizer:
+    """Parser for ANSI escape codes to apply formatting to tkinter Text widget"""
+    
+    # ANSI escape sequence regex pattern
+    ANSI_PATTERN = re.compile(r'\x1b\[((?:\d+;)*\d+)?([a-zA-Z])')
+    
+    # Basic ANSI color codes
+    COLORS = {
+        '30': 'black',
+        '31': 'red',
+        '32': 'green',
+        '33': 'yellow',
+        '34': 'blue',
+        '35': 'magenta',
+        '36': 'cyan',
+        '37': 'white',
+        '90': 'gray',
+        '91': 'red',
+        '92': 'green',
+        '93': 'yellow',
+        '94': 'blue',
+        '95': 'magenta',
+        '96': 'cyan',
+        '97': 'white',
+    }
+    
+    # Text attributes
+    ATTRIBUTES = {
+        '1': 'bold',
+        '3': 'italic',
+        '4': 'underline',
+    }
+    
+    def __init__(self, text_widget):
+        self.text = text_widget
+        self.init_tags()
+        
+    def init_tags(self):
+        """Initialize text widget tags for ANSI colors and attributes"""
+        # Define color tags
+        for code, color in self.COLORS.items():
+            self.text.tag_configure(f"fg_{code}", foreground=color)
+            # Background colors (40-47, 100-107)
+            bg_code = str(int(code) + 10)
+            self.text.tag_configure(f"bg_{bg_code}", background=color)
+        
+        # Define attribute tags
+        self.text.tag_configure('bold', font=('TkDefaultFont', 10, 'bold'))
+        self.text.tag_configure('italic', font=('TkDefaultFont', 10, 'italic'))
+        self.text.tag_configure('underline', underline=1)
+        
+        # Reset tag (default formatting)
+        self.text.tag_configure('reset', foreground='black', background='white')
+    
+    def process_text(self, text):
+        """Process text with ANSI escape codes and add to text widget with appropriate styling"""
+        # Split the text by ANSI escape sequences
+        parts = self.ANSI_PATTERN.split(text)
+        
+        # Track active tags
+        active_tags = set()
+        
+        # Process each part
+        i = 0
+        while i < len(parts):
+            if i % 3 == 0:  # This is regular text
+                if parts[i]:
+                    # Insert text with current active tags
+                    self.text.insert(tk.END, parts[i], tuple(active_tags) if active_tags else '')
+            else:
+                if i % 3 == 1:  # This is the parameter part
+                    if parts[i] and parts[i+1] == 'm':  # 'm' is for SGR (Select Graphic Rendition)
+                        codes = parts[i].split(';')
+                        for code in codes:
+                            if code == '0':  # Reset
+                                active_tags.clear()
+                            elif code in self.COLORS:  # Foreground color
+                                # Remove existing foreground colors
+                                active_tags = {tag for tag in active_tags if not tag.startswith('fg_')}
+                                active_tags.add(f"fg_{code}")
+                            elif code.startswith('4') and code[1:] in self.COLORS:  # Background color
+                                # Remove existing background colors
+                                active_tags = {tag for tag in active_tags if not tag.startswith('bg_')}
+                                active_tags.add(f"bg_{code}")
+                            elif code in self.ATTRIBUTES:  # Text attribute
+                                active_tags.add(self.ATTRIBUTES[code])
+                i += 1  # Skip the command part
+            i += 1
 
 
 class SerialGUI:
@@ -63,6 +154,9 @@ class SerialGUI:
         self.output_text = scrolledtext.ScrolledText(display_frame, wrap=tk.WORD, width=60, height=15)
         self.output_text.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
         self.output_text.config(state=tk.DISABLED)
+
+        # Initialize ANSI colorizer
+        self.ansi_colorizer = AnsiColorizer(self.output_text)
 
         # Status bar
         self.status_var = tk.StringVar()
@@ -148,7 +242,7 @@ class SerialGUI:
     def _update_display(self, text):
         """Update the display text (called from the main thread)"""
         self.output_text.config(state=tk.NORMAL)
-        self.output_text.insert(tk.END, text)
+        self.ansi_colorizer.process_text(text)
         # Auto-scroll to end
         self.output_text.see(tk.END)
         self.output_text.config(state=tk.DISABLED)

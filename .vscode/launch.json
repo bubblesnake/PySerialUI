@@ -1,0 +1,22 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Python: Serial GUI with Breakpoint",
+            "type": "python",
+            "request": "launch",
+            "program": "${workspaceFolder}/serial_gui.py",
+            "console": "integratedTerminal",
+            "justMyCode": true,
+            "env": {
+                "PYTHONBREAKPOINT": "0"
+            },
+            "breakpoints": [
+                {
+                    "path": "${workspaceFolder}/serial_gui.py",
+                    "line": 89
+                }
+            ]
+        }
+    ]
+}
